@@ -75,7 +75,7 @@ class GrayScaleImg(Matrix2d):
         # 현재 데이터를 transpose 시키는 메소드
         r, c = self.shape
         self.data = [list(map(lambda x:x[i],self.data)) for i in range(c)]
-        # self.shape = (c, r)
+        self.shape = (c, r)
     
     def FixBrightness(self, threshold, ratio):
         # threshold 보다 높은 부분을 ratio 만큼 곱해주는 메소드. ratio는 0과 1사이 값이라는 것이 보장됩니다.
