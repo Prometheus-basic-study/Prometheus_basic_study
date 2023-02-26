@@ -10,6 +10,11 @@ from unicodedata import normalize
 
 from typing import Optional, List, Tuple, Dict, Iterable, Callable
 
+import os
+DATA_PATH = 'data'
+if not os.path.exists('data'):
+    DATA_PATH = os.path.join('materials', 'wk15', DATA_PATH)
+
 def clean_lines(lines):
     if isinstance(lines, list):
         return [clean_lines(line) for line in lines]
@@ -30,8 +35,8 @@ def clean_lines(lines):
 
 from torchtext.data.utils import get_tokenizer
 
-train_df, valid_df, test_df = pd.read_pickle('data/train_valid_test.pkl')
-en_vocab, fr_vocab = pd.read_pickle('data/vocab.pkl')
+train_df, valid_df, test_df = pd.read_pickle(os.path.join(DATA_PATH, 'train_valid_test.pkl'))
+en_vocab, fr_vocab = pd.read_pickle(os.path.join(DATA_PATH, 'vocab.pkl'))
 en_tokenizer = get_tokenizer('spacy', language='en_core_web_sm')
 fr_tokenizer = get_tokenizer('spacy', language='fr_core_news_sm')
 
@@ -66,9 +71,9 @@ def sequential_transforms(*transforms):
 
 def append_special(token_ids: List[int]):
     return th.cat([
-        th.tensor([BOS_IDX]),
+        th.tensor([BOS_IDX], dtype=th.long),
         th.tensor(token_ids),
-        th.tensor([EOS_IDX])
+        th.tensor([EOS_IDX], dtype=th.long)
     ])
 
 text_transform = {lang: sequential_transforms(tokenizer_transform[lang],
