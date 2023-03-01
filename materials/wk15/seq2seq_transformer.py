@@ -12,6 +12,7 @@ from typing import Optional, List, Tuple, Dict, Iterable, Callable
 
 import os
 DATA_PATH = 'data'
+project_path = os.path.dirname(os.path.dirname(os.getcwd()))
 if not os.path.exists('data'):
     DATA_PATH = os.path.join('materials', 'wk15', DATA_PATH)
 
@@ -351,13 +352,12 @@ def greedy_decode(model: TransformerSeq2Seq,
                   start_symbol: int,
                   device: th.device = th.device('cpu')):
 
-    memory = model.encode(src, src_mask)
+    memory = model.encode(src, src_mask)    # [seq_len, 1, emb_dim]
     ys = th.ones(1, 1).fill_(start_symbol).type_as(src.data)
     for i in range(max_len-1):
-        tgt_mask = look_ahead_mask(ys.size(0), device=device)
-        out = model.decode(memory, src_mask, ys, tgt_mask)
-        out = model.decode(ys, memory, tgt_mask)
-        prob = model.regressor(out[:, -1])
+        tgt_mask = look_ahead_mask(ys.size(0), device=device)   # upper triangular matrix: [ys.size(0), ys.size(0)]
+        out = model.decode(ys, memory, tgt_mask)    # [ys.size(0), 1, emb_dim]
+        prob = model.regressor(out[-1])
         _, next_word = th.max(prob, dim = 1)
         next_word = next_word.item()
         ys = th.cat([ys, th.ones(1, 1).type_as(src.data).fill_(next_word)], dim=0)
@@ -372,13 +372,14 @@ def translate(model:TransformerSeq2Seq,
     model.eval()
     src = text_transform[SRC_LANG](src_sentence).view(-1, 1).to(device)
     num_tokens = src.shape[0]   # if not batch_first
-    src_mask = th.zeros(num_tokens, num_tokens).type_as(src.data)
-    tgt_tokens = greedy_decode(model, src, src_mask, max_len=num_tokens + 5, start_symbol=BOS_IDX).flatten()
+    src_mask = th.zeros(num_tokens, num_tokens).type(th.bool).to(device)
+    tgt_tokens = greedy_decode(model, src, src_mask, max_len=num_tokens + 5, start_symbol=BOS_IDX, device=device).flatten()
     out_sentence = " ".join(vocab_transform[TGT_LANG].lookup_tokens(list(tgt_tokens.cpu().numpy())))
     return out_sentence
     
 
 device = th.device('cuda' if th.cuda.is_available() else 'cpu')
+model.load_state_dict(th.load(os.path.join(os.path.dirname(DATA_PATH), 'best_model.pt')))
 model = model.to(device)
 # train(model, train_iter, optimizer, criterion, device)
-out = translate(model, 'my name is anonymous')
+out = translate(model, "quel est votre nom ?")
