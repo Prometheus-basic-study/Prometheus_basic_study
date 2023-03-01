@@ -35,8 +35,8 @@ def clean_lines(lines):
 
 from torchtext.data.utils import get_tokenizer
 
-train_df, valid_df, test_df = pd.read_pickle(os.path.join(DATA_PATH, 'train_valid_test.pkl'))
-en_vocab, fr_vocab = pd.read_pickle(os.path.join(DATA_PATH, 'vocab.pkl'))
+train_df, valid_df, test_df = pd.read_pickle(os.path.join(DATA_PATH, 'small_train_valid_test.pkl'))
+en_vocab, fr_vocab = pd.read_pickle(os.path.join(DATA_PATH, 'small_vocab.pkl'))
 en_tokenizer = get_tokenizer('spacy', language='en_core_web_sm')
 fr_tokenizer = get_tokenizer('spacy', language='fr_core_news_sm')
 
@@ -204,7 +204,7 @@ class TransformerSeq2Seq(nn.Module):
 
     def encode(self, src: th.Tensor, src_mask: th.Tensor):
         src = self.src_emb(src)
-        return self.transformer.encoder(src, src_mask=src_mask)
+        return self.transformer.encoder(src, mask=src_mask)
 
     def decode(self, tgt: th.Tensor, memory: th.Tensor, tgt_mask: th.Tensor = None, memory_mask: th.Tensor=None):
         tgt = self.tgt_emb(tgt)
@@ -344,6 +344,41 @@ def evaluate(model: TransformerSeq2Seq,
     return losses / len(dataloader)
 
 
+def greedy_decode(model: TransformerSeq2Seq,
+                  src: th.Tensor,
+                  src_mask: th.Tensor,
+                  max_len: int,
+                  start_symbol: int,
+                  device: th.device = th.device('cpu')):
+
+    memory = model.encode(src, src_mask)
+    ys = th.ones(1, 1).fill_(start_symbol).type_as(src.data)
+    for i in range(max_len-1):
+        tgt_mask = look_ahead_mask(ys.size(0), device=device)
+        out = model.decode(memory, src_mask, ys, tgt_mask)
+        out = model.decode(ys, memory, tgt_mask)
+        prob = model.regressor(out[:, -1])
+        _, next_word = th.max(prob, dim = 1)
+        next_word = next_word.item()
+        ys = th.cat([ys, th.ones(1, 1).type_as(src.data).fill_(next_word)], dim=0)
+        if next_word == EOS_IDX:
+            break
+    return ys
+
+
+def translate(model:TransformerSeq2Seq,
+              src_sentence: str):
+    
+    model.eval()
+    src = text_transform[SRC_LANG](src_sentence).view(-1, 1).to(device)
+    num_tokens = src.shape[0]   # if not batch_first
+    src_mask = th.zeros(num_tokens, num_tokens).type_as(src.data)
+    tgt_tokens = greedy_decode(model, src, src_mask, max_len=num_tokens + 5, start_symbol=BOS_IDX).flatten()
+    out_sentence = " ".join(vocab_transform[TGT_LANG].lookup_tokens(list(tgt_tokens.cpu().numpy())))
+    return out_sentence
+    
+
 device = th.device('cuda' if th.cuda.is_available() else 'cpu')
 model = model.to(device)
-train(model, train_iter, optimizer, criterion, device)
+# train(model, train_iter, optimizer, criterion, device)
+out = translate(model, 'my name is anonymous')
